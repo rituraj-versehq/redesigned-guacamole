@@ -1,0 +1,3 @@
+SupplierId,SupplierName,GSTNumber,PaymentBlockStatus
+SUP-991,ABC LOGISTICS,29ABCDE1234F1Z5,false
+SUP-442,FastRoad Transport,27PQRSX8821T1Z8,true

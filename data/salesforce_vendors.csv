@@ -1,0 +1,3 @@
+Id,Vendor_Name__c,GSTIN__c,Vendor_Category__c,Preferred_Transport_Mode__c,Credit_Hold__c
+SF-V-900,ABC Logistics Pvt Ltd,29ABCDE1234F1Z5,Strategic,Road,false
+SF-V-901,NewRoute Logistics,27NEWRT1234F1Z9,Standard,Air,false
