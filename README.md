@@ -512,3 +512,101 @@ This gives us:
 - source-aware values
 - reusable mappings
 - deterministic data filling
+
+## Why This Scales Better
+
+Real example:
+
+```text
+SAP calls the field SupplierName.
+Salesforce calls it Vendor_Name__c.
+MegaERP calls it SUPPLIER_LEGAL_NAME.
+```
+
+All three can map to:
+
+```text
+Vendor.name
+```
+
+So our system stores one clean Vendor name field and three reusable mappings:
+
+```text
+SupplierName         -> name
+Vendor_Name__c       -> name
+SUPPLIER_LEGAL_NAME  -> name
+```
+
+With JSON, this becomes messy:
+
+```json
+{
+  "SupplierName": "ABC LOGISTICS",
+  "Vendor_Name__c": "ABC Logistics Pvt Ltd",
+  "SUPPLIER_LEGAL_NAME": "ABC Logistics Pvt Ltd"
+}
+```
+
+Problem:
+
+```text
+Which one should the product show?
+Which one should search use?
+Which one changed last?
+```
+
+With a 350-column table, we keep adding columns:
+
+```text
+supplier_name
+vendor_name
+supplier_legal_name
+account_name
+display_name
+name_1
+name_2
+```
+
+Problem:
+
+```text
+The table grows forever.
+Most columns are empty.
+Every new source creates another schema debate.
+```
+
+Our approach scales because new source systems mostly add mappings, not new database columns.
+
+Example:
+
+```text
+New source field: RISK_TIER
+Existing internal field: risk_rating
+Action: save mapping RISK_TIER -> risk_rating
+```
+
+No schema change needed.
+
+If the source has a truly new useful fact:
+
+```text
+New source field: CARBON_REPORTING_TIER
+No internal field exists.
+Action: create one extra field, then map to it.
+```
+
+So growth is controlled:
+
+```text
+Known concept -> reuse existing field
+New useful concept -> add one extra field
+Junk column -> ignore
+```
+
+That is why this approach works better when:
+
+- there are many source systems
+- each source has different names
+- each source has hundreds of columns
+- most columns are irrelevant
+- new customer schemas keep appearing
