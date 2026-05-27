@@ -1,0 +1,10 @@
+# Why: This table has account-looking data but no GSTIN. It may not be a Vendor table.
+# Use: source_type=Salesforce
+# Upload: SRC=$(curl -s -X POST http://127.0.0.1:8000/sources/upload -F source_type=Salesforce -F file=@data/stress/ambiguous_account_no_gstin.csv | jq -r .source_id)
+# Map: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/setup-fields | jq
+# Expected: best result is no mappings, because there is no strong vendor ID like GSTIN.
+# Do not run populate unless mappings look safe.
+# Bad sign: it maps Account_Name__c to name and creates vendors from weak account data.
+Id,Account_Name__c,Account_Type__c,Phone,Email,City,Country,OwnerId,RecordTypeId
+ACC-100,ABC Logistics Contact Account,Partner,+91-11111,ops@example.com,Bengaluru,IN,005xx0001,012xx0001
+ACC-101,FastRoad Buying Account,Customer,+91-22222,buy@example.com,Pune,IN,005xx0002,012xx0002

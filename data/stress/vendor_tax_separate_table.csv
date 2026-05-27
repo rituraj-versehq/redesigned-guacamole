@@ -1,0 +1,10 @@
+# Why: This is tax data, not a Vendor master table.
+# Use: source_type=TaxSystem
+# Upload: SRC=$(curl -s -X POST http://127.0.0.1:8000/sources/upload -F source_type=TaxSystem -F file=@data/stress/vendor_tax_separate_table.csv | jq -r .source_id)
+# Map: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/setup-fields | jq
+# Expected: best result is no vendor mappings.
+# Do not run populate unless mappings look safe.
+# Bad sign: it creates nameless vendors from tax rows.
+VendorExternalId,TaxRegistrationNumber,TaxType,TaxCountry,ValidFrom,ValidTo
+SUP-991,29ABCDE1234F1Z5,GSTIN,IN,2024-01-01,
+SUP-993,27NEWRT1234F1Z9,GSTIN,IN,2024-01-01,

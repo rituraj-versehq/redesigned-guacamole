@@ -1,0 +1,11 @@
+# Why: One table has both vendors and customers.
+# Use: source_type=SAPBP
+# Upload: SRC=$(curl -s -X POST http://127.0.0.1:8000/sources/upload -F source_type=SAPBP -F file=@data/stress/sap_business_partner_mixed.csv | jq -r .source_id)
+# Map: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/setup-fields | jq
+# Expected mapping: BP_NAME->name, TAX_NUMBER->gstin, BP_ID as source ID.
+# Important: current code has no row filter. If you populate, the CUSTOMER row may become a vendor.
+# This test shows we need row filters like BP_ROLE=VENDOR before filling data.
+BP_ID,BP_ROLE,BP_NAME,TAX_NUMBER,PARTNER_GROUP,PAYMENT_BLOCK,TRANSPORT_MODE
+BP-991,VENDOR,ABC Logistics Pvt Ltd,29ABCDE1234F1Z5,Strategic,N,Road
+BP-200,CUSTOMER,Customer Only Retail,29CUSTO1234F1Z7,Retail,N,NA
+BP-993,VENDOR,NewRoute Logistics,27NEWRT1234F1Z9,Standard,N,Air

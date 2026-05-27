@@ -95,9 +95,15 @@ def classify_source_table_for_entity(
             (
                 "system",
                 (
-                    "You classify whether a source table represents an internal "
-                    "entity and map source columns to internal fields. Return JSON "
-                    "only in this shape: "
+                    "Return JSON only. "
+                    "Only map a source table to Vendor if it has at least one "
+                    "strong Vendor identifier: "
+                    "- GSTIN / tax registration "
+                    "- supplier id / vendor id / vendor code "
+                    "- explicit vendor role/type flag. "
+                    "If not, return matches_entity=false and empty mappings. "
+                    "Generic Id must not map to vendor_code. "
+                    "Output shape: "
                     '{"matches_entity": true, "entity_type": "vendor", '
                     '"new_fields": [{"field_name": "vendor_category", '
                     '"field_type": "text"}], "mappings": [{"source_field": '

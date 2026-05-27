@@ -20,9 +20,18 @@ async def upload_source(
     db: Session = Depends(get_db),
 ):
     content = (await file.read()).decode("utf-8")
-    rows = list(csv.DictReader(io.StringIO(content)))
+    rows = list(csv.DictReader(io.StringIO(strip_csv_comments(content))))
     source_id = load_source(db, source_type, rows)
     return UploadResponse(source_id=source_id, rows=len(rows))
+
+
+def strip_csv_comments(content: str) -> str:
+    lines = [
+        line
+        for line in content.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    return "\n".join(lines)
 
 
 @router.post("/{source_id}/setup-fields", response_model=SetupFieldsResponse)

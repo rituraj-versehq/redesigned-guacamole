@@ -1,0 +1,12 @@
+# Why: Duplicate GSTIN and missing GSTIN rows.
+# Use: source_type=Salesforce
+# Upload: SRC=$(curl -s -X POST http://127.0.0.1:8000/sources/upload -F source_type=Salesforce -F file=@data/stress/salesforce_duplicate_missing_gstin.csv | jq -r .source_id)
+# Map: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/setup-fields | jq
+# Expected mapping: GSTIN__c->gstin, Vendor_Name__c->name, Id->salesforce_vendor_id.
+# Fill data: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/populate | jq
+# Expected issue: two rows hit the same VEN-101. Last one may win.
+# Expected issue: missing GSTIN row may still create a vendor. That should later become review logic.
+Id,Vendor_Name__c,GSTIN__c,Vendor_Category__c,Credit_Hold__c
+SF-DUP-1,ABC Logistics Duplicate One,29ABCDE1234F1Z5,Strategic,false
+SF-DUP-2,ABC Logistics Duplicate Two,29ABCDE1234F1Z5,Strategic-Updated,false
+SF-NOGSTIN-1,No GSTIN Logistics,,Unknown,false

@@ -1,0 +1,10 @@
+# Why: This is invoice data. It mentions vendors but is not the Vendor master table.
+# Use: source_type=APInvoice
+# Upload: SRC=$(curl -s -X POST http://127.0.0.1:8000/sources/upload -F source_type=APInvoice -F file=@data/stress/invoice_vendor_reference_not_master.csv | jq -r .source_id)
+# Map: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/setup-fields | jq
+# Expected: best result is no vendor mappings.
+# Do not run populate unless mappings look safe.
+# Bad sign: it updates vendors using invoice rows.
+InvoiceId,InvoiceNumber,InvoiceDate,VendorId,VendorName,VendorGSTIN,InvoiceAmount,Currency,ApprovalStatus
+INV-1,AP-2026-001,2026-05-01,SUP-991,ABC Logistics Pvt Ltd,29ABCDE1234F1Z5,12000,INR,APPROVED
+INV-2,AP-2026-002,2026-05-03,SUP-993,NewRoute Logistics,27NEWRT1234F1Z9,9000,INR,PENDING

@@ -1,0 +1,10 @@
+# Why: Real ERP columns often have ugly names.
+# Use: source_type=OracleAP
+# Upload: SRC=$(curl -s -X POST http://127.0.0.1:8000/sources/upload -F source_type=OracleAP -F file=@data/stress/oracle_ap_suppliers_weird_names.csv | jq -r .source_id)
+# Map: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/setup-fields | jq
+# Check mappings: VENDOR_NAME should mean name. VAT_REGISTRATION_NUM should mean gstin.
+# Fill data: curl -s -X POST http://127.0.0.1:8000/sources/$SRC/populate | jq
+# Expected data: ABC matches VEN-101 by GSTIN. NewRoute becomes a new vendor.
+VENDOR_ID,SEGMENT1,VENDOR_NAME,VAT_REGISTRATION_NUM,HOLD_FLAG,VENDOR_TYPE_LOOKUP_CODE,FREIGHT_TERMS_LOOKUP_CODE,PAY_GROUP_LOOKUP_CODE,ATTRIBUTE17,ATTRIBUTE18
+300991,SUP-991,ABC Logistics Pvt Ltd,29ABCDE1234F1Z5,N,TRANSPORT,ROAD,STRATEGIC,unused,unused
+300993,SUP-993,NewRoute Logistics,27NEWRT1234F1Z9,N,LOGISTICS,AIR,STANDARD,unused,unused
