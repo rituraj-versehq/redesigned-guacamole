@@ -1,20 +1,66 @@
-import csv
-import io
-
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db import Base, get_db
-from app.main import app
+from app.db import Base
 from app.models import (
     EntityFieldDefinition,
     EntityFieldValue,
+    EntityHistory,
     EntityIdentifier,
     SourceFieldMapping,
     Vendor,
 )
+from app.services.source_loader import load_source
+from app.services.stage1_field_setup import setup_fields
+from app.services.stage2_value_population import populate_vendors
+
+CLASSIFIER_OUTPUT = {
+    "matches_entity": True,
+    "entity_type": "vendor",
+    "new_fields": [
+        {"field_name": "vendor_category", "field_type": "text"},
+        {"field_name": "preferred_transport_mode", "field_type": "text"},
+    ],
+    "mappings": [
+        {
+            "source_field": "GSTIN__c",
+            "target_field": "gstin",
+            "field_role": "match_key",
+            "storage": "main_column",
+        },
+        {
+            "source_field": "Vendor_Name__c",
+            "target_field": "name",
+            "field_role": "value",
+            "storage": "main_column",
+        },
+        {
+            "source_field": "Credit_Hold__c",
+            "target_field": "payment_blocked",
+            "field_role": "value",
+            "storage": "extra_field",
+        },
+        {
+            "source_field": "Vendor_Category__c",
+            "target_field": "vendor_category",
+            "field_role": "value",
+            "storage": "extra_field",
+        },
+        {
+            "source_field": "Preferred_Transport_Mode__c",
+            "target_field": "preferred_transport_mode",
+            "field_role": "value",
+            "storage": "extra_field",
+        },
+        {
+            "source_field": "Id",
+            "target_field": "salesforce_vendor_id",
+            "field_role": "identifier",
+            "storage": "identifier",
+        },
+    ],
+}
 
 
 def test_salesforce_updates_existing_sap_vendor(monkeypatch):
@@ -26,66 +72,56 @@ def test_salesforce_updates_existing_sap_vendor(monkeypatch):
     Base.metadata.create_all(engine)
     TestingSessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
-    def override_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_db
-    tool_names = []
+    classifier_calls = []
     monkeypatch.setattr(
-        "app.ai.field_mapper.invoke_langchain_agent",
-        lambda model, tools, source_id, system_prompt: run_scripted_tools(
-            tools, tool_names
+        "app.ai.pipeline_field_mapper.classify_source_table_for_entity",
+        lambda source_object, source_shape, entity: fake_classifier(
+            classifier_calls, source_object, source_shape, entity
         ),
     )
 
-    try:
-        with TestClient(app) as client:
-            seed_sap_vendor(
-                TestingSessionLocal,
-                tenant_id="T1",
-                name="ABC LOGISTICS",
-                gstin="29ABCDE1234F1Z5",
-                vendor_code="SUP-991",
-            )
+    seed_sap_vendor(
+        TestingSessionLocal,
+        tenant_id="T1",
+        name="ABC LOGISTICS",
+        gstin="29ABCDE1234F1Z5",
+        vendor_code="SUP-991",
+    )
 
-            source_id = upload_salesforce_row(
-                client,
-                {
-                    "Id": "SF-V-900",
-                    "Vendor_Name__c": "ABC Logistics Pvt Ltd",
-                    "GSTIN__c": "29ABCDE1234F1Z5",
-                    "Vendor_Category__c": "Strategic",
-                    "Preferred_Transport_Mode__c": "Road",
-                    "Credit_Hold__c": False,
-                },
-            )
+    db = TestingSessionLocal()
+    source_id = load_source(
+        db,
+        "Salesforce",
+        [
+            {
+                "Id": "SF-V-900",
+                "Vendor_Name__c": "ABC Logistics Pvt Ltd",
+                "GSTIN__c": "29ABCDE1234F1Z5",
+                "Vendor_Category__c": "Strategic",
+                "Preferred_Transport_Mode__c": "Road",
+                "Credit_Hold__c": False,
+            }
+        ],
+    )
 
-            client.post(f"/sources/{source_id}/setup-fields")
-            client.post(f"/sources/{source_id}/populate")
+    setup_fields(db, source_id)
+    populate_vendors(db, source_id)
 
-            db = TestingSessionLocal()
-            vendor = get_vendor_by_gstin(db, "29ABCDE1234F1Z5")
+    vendor = get_vendor_by_gstin(db, "29ABCDE1234F1Z5")
 
-            assert vendor.name == "ABC Logistics Pvt Ltd"
-            assert get_extra(db, vendor.id)["vendor_category"] == "Strategic"
-            assert get_extra(db, vendor.id)["preferred_transport_mode"] == "Road"
-            assert get_identifiers(db, vendor.id)["salesforce_vendor_id"] == "SF-V-900"
-            assert len(db.scalars(select(SourceFieldMapping)).all()) == 6
-            assert tool_names[:5] == [
-                "list_source_objects",
-                "describe_source_object",
-                "sample_source_rows",
-                "describe_internal_entity",
-                "list_existing_vendors",
-            ]
-            assert client.get(f"/vendors/{vendor.id}/history").json()["history"]
-            db.close()
-    finally:
-        app.dependency_overrides.clear()
+    assert vendor.name == "ABC Logistics Pvt Ltd"
+    assert get_extra(db, vendor.id)["vendor_category"] == "Strategic"
+    assert get_extra(db, vendor.id)["preferred_transport_mode"] == "Road"
+    assert get_identifiers(db, vendor.id)["salesforce_vendor_id"] == "SF-V-900"
+    assert len(db.scalars(select(SourceFieldMapping)).all()) == 6
+    assert classifier_calls[0]["source_object"]["name"] == (
+        "salesforce.Supplier_Account__c"
+    )
+    assert classifier_calls[0]["entity"]["entity_type"] == "vendor"
+    assert db.scalars(
+        select(EntityHistory).where(EntityHistory.entity_id == vendor.id)
+    ).all()
+    db.close()
 
 
 def seed_sap_vendor(session_factory, tenant_id, name, gstin, vendor_code):
@@ -128,108 +164,15 @@ def seed_sap_vendor(session_factory, tenant_id, name, gstin, vendor_code):
     db.close()
 
 
-def upload_salesforce_row(client, row):
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=list(row.keys()))
-    writer.writeheader()
-    writer.writerow(row)
-    response = client.post(
-        "/sources/upload",
-        data={"source_type": "Salesforce"},
-        files={"file": ("salesforce_vendors.csv", output.getvalue(), "text/csv")},
+def fake_classifier(classifier_calls, source_object, source_shape, entity):
+    classifier_calls.append(
+        {
+            "source_object": source_object,
+            "source_shape": source_shape,
+            "entity": entity,
+        }
     )
-    return response.json()["source_id"]
-
-
-def run_scripted_tools(tools, tool_names):
-    tools_by_name = {tool.name: tool for tool in tools}
-    calls = [
-        ("list_source_objects", {}),
-        ("describe_source_object", {"object_name": "salesforce.Supplier_Account__c"}),
-        (
-            "sample_source_rows",
-            {"object_name": "salesforce.Supplier_Account__c", "limit": 5},
-        ),
-        ("describe_internal_entity", {"entity_type": "vendor"}),
-        ("list_existing_vendors", {"limit": 5}),
-        (
-            "create_extra_field",
-            {
-                "entity_type": "vendor",
-                "field_name": "vendor_category",
-                "field_type": "text",
-            },
-        ),
-        (
-            "create_extra_field",
-            {
-                "entity_type": "vendor",
-                "field_name": "preferred_transport_mode",
-                "field_type": "text",
-            },
-        ),
-        (
-            "save_mapping",
-            {
-                "source_field": "GSTIN__c",
-                "target_field": "gstin",
-                "field_role": "match_key",
-                "storage": "main_column",
-            },
-        ),
-        (
-            "save_mapping",
-            {
-                "source_field": "Vendor_Name__c",
-                "target_field": "name",
-                "field_role": "value",
-                "storage": "main_column",
-            },
-        ),
-        (
-            "save_mapping",
-            {
-                "source_field": "Credit_Hold__c",
-                "target_field": "payment_blocked",
-                "field_role": "value",
-                "storage": "extra_field",
-            },
-        ),
-        (
-            "save_mapping",
-            {
-                "source_field": "Vendor_Category__c",
-                "target_field": "vendor_category",
-                "field_role": "value",
-                "storage": "extra_field",
-            },
-        ),
-        (
-            "save_mapping",
-            {
-                "source_field": "Preferred_Transport_Mode__c",
-                "target_field": "preferred_transport_mode",
-                "field_role": "value",
-                "storage": "extra_field",
-            },
-        ),
-        (
-            "save_mapping",
-            {
-                "source_field": "Id",
-                "target_field": "salesforce_vendor_id",
-                "field_role": "identifier",
-                "storage": "identifier",
-            },
-        ),
-        ("finish", {"entity_type": "vendor"}),
-    ]
-
-    for name, arguments in calls:
-        tool_names.append(name)
-        tools_by_name[name].invoke(arguments)
-
-    return {"messages": []}
+    return CLASSIFIER_OUTPUT
 
 
 def get_vendor_by_gstin(db, gstin):

@@ -3,10 +3,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..ai.field_mapper import run_source_mapping_agent
+from ..ai.pipeline_field_mapper import run_pipeline_field_mapper
 
 
 def setup_fields(db: Session, source_id: str) -> dict[str, Any]:
-    output = run_source_mapping_agent(db, source_id)
+    # output = run_source_mapping_agent(db, source_id)
+    output = run_pipeline_field_mapper(db, source_id)
     validate_output(output)
     return output
 
